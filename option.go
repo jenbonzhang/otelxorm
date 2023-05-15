@@ -21,6 +21,7 @@ func (o optionFunc) apply(c *config) {
 }
 
 type config struct {
+	dbName         string
 	tracerProvider trace.TracerProvider
 	tracer         trace.Tracer
 	attrs          []attribute.KeyValue
@@ -55,7 +56,7 @@ func WithFormatSQL(formatSQL func(sql string, args []interface{}) string) Option
 	})
 }
 
-func WithFormatSQLReplace(formatSQL func(sql string, args []interface{}) string) Option {
+func WithFormatSQLReplace() Option {
 	return WithFormatSQL(formatSQLReplace)
 }
 
