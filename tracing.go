@@ -37,7 +37,7 @@ func Hook(opts ...Option) contexts.Hook {
 		cfg.formatSQL = defaultFormatSQL
 	}
 	for _, attr := range cfg.attrs {
-		if attr.Key == semconv.DBSystemKey {
+		if attr.Key == semconv.DBNameKey {
 			cfg.dbName = attr.Value.AsString()
 		}
 	}
