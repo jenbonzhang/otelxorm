@@ -1,9 +1,13 @@
 package otelxorm
 
 import (
+	"encoding/json"
+	"fmt"
 	"go.opentelemetry.io/otel/attribute"
 	semconv "go.opentelemetry.io/otel/semconv/v1.18.0"
 	"go.opentelemetry.io/otel/trace"
+	"reflect"
+	"strings"
 )
 
 // Option specifies instrumentation configuration options.
@@ -20,16 +24,7 @@ type config struct {
 	tracerProvider trace.TracerProvider
 	tracer         trace.Tracer
 	attrs          []attribute.KeyValue
-}
-
-func newConfig() *config {
-	return &config{
-		tracerProvider: trace.NewNoopTracerProvider(),
-		tracer: trace.NewNoopTracerProvider().Tracer(
-			tracerName,
-			trace.WithInstrumentationVersion(SemVersion()),
-		),
-	}
+	formatSQL      func(sql string, args []interface{}) string
 }
 
 // WithTracerProvider with tracer provider.
@@ -52,4 +47,34 @@ func WithDBName(name string) Option {
 	return optionFunc(func(c *config) {
 		c.attrs = append(c.attrs, semconv.DBName(name))
 	})
+}
+
+func WithFormatSQL(formatSQL func(sql string, args []interface{}) string) Option {
+	return optionFunc(func(c *config) {
+		c.formatSQL = formatSQL
+	})
+}
+
+func WithFormatSQLReplace(formatSQL func(sql string, args []interface{}) string) Option {
+	return WithFormatSQL(formatSQLReplace)
+}
+
+func defaultFormatSQL(sql string, args []interface{}) string {
+	argsStr := fmt.Sprintf("%v", args)
+	m, err := json.Marshal(args)
+	if err == nil {
+		argsStr = string(m)
+	}
+	return fmt.Sprintf("%v %v", sql, argsStr)
+}
+
+func formatSQLReplace(sql string, args []interface{}) string {
+	for i, arg := range args {
+		if reflect.TypeOf(arg).Kind() == reflect.Ptr {
+			sql = strings.Replace(sql, fmt.Sprintf("$%d", i+1), fmt.Sprintf("'%v'", reflect.ValueOf(arg).Elem().Interface()), -1)
+		} else {
+			sql = strings.Replace(sql, fmt.Sprintf("$%d", i+1), fmt.Sprintf("'%v'", arg), -1)
+		}
+	}
+	return sql
 }
