@@ -36,6 +36,11 @@ func Hook(opts ...Option) contexts.Hook {
 	if cfg.formatSQL == nil {
 		cfg.formatSQL = defaultFormatSQL
 	}
+	for _, attr := range cfg.attrs {
+		if attr.Key == semconv.DBSystemKey {
+			cfg.dbName = attr.Value.AsString()
+		}
+	}
 	return &OpenTelemetryHook{
 		config: cfg,
 	}
@@ -51,7 +56,7 @@ func WrapEngineGroup(eg *xorm.EngineGroup, opts ...Option) {
 
 func (h *OpenTelemetryHook) BeforeProcess(c *contexts.ContextHook) (context.Context, error) {
 	ctx, _ := h.config.tracer.Start(c.Ctx,
-		"xorm-db",
+		h.config.dbName+"-xorm-db",
 		trace.WithSpanKind(trace.SpanKindClient),
 	)
 	return ctx, nil
