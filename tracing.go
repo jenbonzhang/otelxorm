@@ -2,7 +2,6 @@ package otelxorm
 
 import (
 	"context"
-	"fmt"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
@@ -28,7 +27,20 @@ func Hook(opts ...Option) contexts.Hook {
 	if cfg.tracerProvider == nil {
 		cfg.tracerProvider = otel.GetTracerProvider()
 	}
-
+	if cfg.tracer == nil {
+		cfg.tracer = cfg.tracerProvider.Tracer(
+			tracerName,
+			trace.WithInstrumentationVersion(SemVersion()),
+		)
+	}
+	if cfg.formatSQL == nil {
+		cfg.formatSQL = defaultFormatSQL
+	}
+	for _, attr := range cfg.attrs {
+		if attr.Key == semconv.DBNameKey {
+			cfg.dbName = attr.Value.AsString()
+		}
+	}
 	return &OpenTelemetryHook{
 		config: cfg,
 	}
@@ -43,8 +55,12 @@ func WrapEngineGroup(eg *xorm.EngineGroup, opts ...Option) {
 }
 
 func (h *OpenTelemetryHook) BeforeProcess(c *contexts.ContextHook) (context.Context, error) {
+	spanName := "xorm-db"
+	if len(h.config.dbName) != 0 {
+		spanName = h.config.dbName
+	}
 	ctx, _ := h.config.tracer.Start(c.Ctx,
-		"xorm-db",
+		spanName,
 		trace.WithSpanKind(trace.SpanKindClient),
 	)
 	return ctx, nil
@@ -57,7 +73,7 @@ func (h *OpenTelemetryHook) AfterProcess(c *contexts.ContextHook) error {
 
 	attrs = append(attrs, h.config.attrs...)
 	attrs = append(attrs, attribute.Key("go.orm").String("xorm"))
-	attrs = append(attrs, semconv.DBStatement(fmt.Sprintf("%v %v", c.SQL, c.Args)))
+	attrs = append(attrs, semconv.DBStatement(h.config.formatSQL(c.SQL, c.Args)))
 
 	if c.Err != nil {
 		span.RecordError(c.Err)
