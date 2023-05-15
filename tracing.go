@@ -2,7 +2,6 @@ package otelxorm
 
 import (
 	"context"
-	"fmt"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
@@ -28,7 +27,15 @@ func Hook(opts ...Option) contexts.Hook {
 	if cfg.tracerProvider == nil {
 		cfg.tracerProvider = otel.GetTracerProvider()
 	}
-
+	if cfg.tracer == nil {
+		cfg.tracer = cfg.tracerProvider.Tracer(
+			tracerName,
+			trace.WithInstrumentationVersion(SemVersion()),
+		)
+	}
+	if cfg.formatSQL == nil {
+		cfg.formatSQL = defaultFormatSQL
+	}
 	return &OpenTelemetryHook{
 		config: cfg,
 	}
@@ -57,7 +64,7 @@ func (h *OpenTelemetryHook) AfterProcess(c *contexts.ContextHook) error {
 
 	attrs = append(attrs, h.config.attrs...)
 	attrs = append(attrs, attribute.Key("go.orm").String("xorm"))
-	attrs = append(attrs, semconv.DBStatement(fmt.Sprintf("%v %v", c.SQL, c.Args)))
+	attrs = append(attrs, semconv.DBStatement(h.config.formatSQL(c.SQL, c.Args)))
 
 	if c.Err != nil {
 		span.RecordError(c.Err)
